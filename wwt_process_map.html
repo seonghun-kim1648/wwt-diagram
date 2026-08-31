@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>청주 SEC WT/WWT 통합 공정 모식도</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#0b131b;
+    --panel:#111c26;
+    --panel-2:#0e1821;
+    --line:#1e2f3d;
+    --border:#28404f;
+    --text:#cfe0ea;
+    --text-dim:#7f9aab;
+    --wt:#4fb3e8;
+    --cool:#3ecfb0;
+    --ctbd:#b18cf0;
+    --wwt:#5fd08a;
+    --sludge:#c99a63;
+    --chem:#f0a63e;
+    --chem-glow:#ffcf80;
+    --danger:#e8636b;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:'IBM Plex Sans KR',system-ui,sans-serif; -webkit-tap-highlight-color: transparent;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+
+  header{
+    padding:16px 16px 10px;
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#0e1a24,#0b131b);
+    position:sticky; top:0; z-index:30;
+  }
+  header h1{
+    font-size:15px; margin:0 0 4px; font-weight:700; letter-spacing:.2px; color:#eaf3f8;
+  }
+  header p{margin:0; font-size:11.5px; color:var(--text-dim); line-height:1.5;}
+
+  .toolbar{
+    display:flex; gap:6px; padding:10px 12px; overflow-x:auto;
+    border-bottom:1px solid var(--line); background:var(--panel-2);
+    -webkit-overflow-scrolling:touch;
+  }
+  .toolbar::-webkit-scrollbar{height:0;}
+  .tbtn{
+    flex:0 0 auto; padding:7px 12px; border-radius:7px; border:1px solid var(--border);
+    background:#152230; color:var(--text); font-size:12px; white-space:nowrap; cursor:pointer;
+  }
+  .tbtn:active{transform:translateY(1px);}
+  .tbtn.reset{color:var(--danger); border-color:#4a2529;}
+
+  #chemRow{
+    display:flex; gap:8px; padding:12px; overflow-x:auto; -webkit-overflow-scrolling:touch;
+    border-bottom:1px solid var(--line); background:var(--panel);
+  }
+  #chemRow::-webkit-scrollbar{height:0;}
+  .chip{
+    flex:0 0 auto; padding:8px 13px; border-radius:20px; font-size:12.5px; font-weight:600;
+    border:1.5px solid var(--chem); color:var(--chem); background:transparent; cursor:pointer;
+    white-space:nowrap;
+  }
+  .chip.active{background:var(--chem); color:#231400; box-shadow:0 0 0 3px rgba(240,166,62,.25);}
+
+  #stage{
+    position:relative; overflow:auto; height:56vh; min-height:340px;
+    background:
+      linear-gradient(var(--line) 1px, transparent 1px) 0 0/40px 40px,
+      linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0/40px 40px,
+      var(--bg);
+    touch-action: pan-x pan-y pinch-zoom;
+  }
+  #zoomWrap{ transform-origin: 0 0; }
+  svg{ display:block; }
+
+  .node rect{ stroke-width:1.4; transition: all .18s ease; }
+  .node text{ fill:var(--text); font-size:12px; pointer-events:none; }
+  .node .tag{ fill:var(--text-dim); font-size:8.5px; font-family:'IBM Plex Mono',monospace; pointer-events:none;}
+  .node{ cursor:pointer; }
+  .node.dim rect{ opacity:.18; }
+  .node.dim text{ opacity:.18; }
+  .node.hit rect{ filter: drop-shadow(0 0 6px currentColor); }
+
+  path.edge{ fill:none; stroke:#2a4457; stroke-width:1.3; opacity:.35; }
+  path.edge.on{ stroke:var(--chem); stroke-width:2.6; opacity:1;
+    stroke-dasharray:6 5; animation: dash 1s linear infinite; filter: drop-shadow(0 0 4px var(--chem-glow));}
+  path.edge.dim{ opacity:.06; }
+  @keyframes dash{ to{ stroke-dashoffset:-22; } }
+
+  .cat-label{ fill:var(--text-dim); font-size:11px; font-weight:600; letter-spacing:.5px; }
+
+  #panel{
+    border-top:1px solid var(--line); background:var(--panel-2);
+    padding:14px 16px 26px; min-height:120px;
+  }
+  #panel h2{ font-size:13.5px; margin:0 0 6px; color:#eaf3f8; }
+  #panel .sub{ font-size:11px; color:var(--text-dim); margin-bottom:10px; }
+  #panel .placeholder{ font-size:12.5px; color:var(--text-dim); line-height:1.6; }
+  .dest-list{ display:flex; flex-direction:column; gap:6px; margin-top:4px;}
+  .dest-item{
+    display:flex; justify-content:space-between; gap:10px; font-size:12.5px;
+    padding:7px 10px; background:#0e1a24; border:1px solid var(--line); border-radius:6px;
+  }
+  .dest-item b{ color:#eaf3f8; font-weight:600; }
+  .dest-item span{ color:var(--text-dim); font-size:11px; }
+
+  #excelSection{ padding:16px; border-top:1px solid var(--line); background:var(--panel);}
+  #excelSection h3{ font-size:13px; margin:0 0 6px; color:#eaf3f8;}
+  #excelSection p{ font-size:11.5px; color:var(--text-dim); margin:0 0 10px; line-height:1.6;}
+  .filebtn{
+    display:inline-flex; align-items:center; gap:8px; padding:9px 14px; border-radius:8px;
+    border:1px dashed var(--border); background:#0e1a24; color:var(--text); font-size:12.5px; cursor:pointer;
+  }
+  #excelPreview{ margin-top:12px; font-size:11px; overflow-x:auto; }
+  #excelPreview table{ border-collapse:collapse; width:100%; }
+  #excelPreview th, #excelPreview td{
+    border:1px solid var(--line); padding:5px 8px; white-space:nowrap; font-family:'IBM Plex Mono',monospace;
+  }
+  #excelPreview th{ background:#152230; color:var(--text); font-weight:600; }
+  #excelPreview td{ color:var(--text-dim); }
+
+  .legend{ display:flex; flex-wrap:wrap; gap:10px 16px; padding:10px 16px 4px; font-size:10.5px; color:var(--text-dim);}
+  .legend span{ display:inline-flex; align-items:center; gap:5px;}
+  .dot{ width:9px; height:9px; border-radius:2px; display:inline-block; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>청주 SEC 발전운영팀 · WT / WWT 통합 공정 모식도</h1>
+  <p>Water Balance Diagram (p.5) 기준 · 약품탱크를 탭하면 주입 배관과 목적지 설비가 강조됩니다.</p>
+</header>
+
+<div class="toolbar">
+  <button class="tbtn" onclick="zoom(1.15)">확대 +</button>
+  <button class="tbtn" onclick="zoom(0.87)">축소 −</button>
+  <button class="tbtn" onclick="fitReset()">화면 맞춤</button>
+  <button class="tbtn reset" onclick="clearSelection()">선택 해제</button>
+</div>
+
+<div id="chemRow"></div>
+
+<div class="legend" id="legend"></div>
+
+<div id="stage">
+  <div id="zoomWrap">
+    <svg id="svg" viewBox="0 0 1340 900" width="1340" height="900" xmlns="http://www.w3.org/2000/svg"></svg>
+  </div>
+</div>
+
+<div id="panel">
+  <div id="panelBody">
+    <div class="placeholder">약품탱크 칩을 선택하거나 다이어그램의 설비를 탭하면 상세 정보(설비 태그, 연결 관계, PFD 근거)가 여기에 표시됩니다.</div>
+  </div>
+</div>
+
+<div id="excelSection">
+  <h3>Daily 엑셀 업로드 (약품 투입량 · 폐수 이동량 · Conductivity)</h3>
+  <p>실제 사용 중인 Daily 엑셀 파일을 올리면 시트 구조를 읽어 아래에 미리보기로 보여드립니다.
+  다음 단계에서 실제 컬럼(날짜/약품명/유량/전도도 등)을 알려주시면 다이어그램 수치가 자동 갱신되도록 연결하겠습니다.</p>
+  <label class="filebtn">
+    📄 엑셀 파일 선택 (.xlsx/.csv)
+    <input type="file" id="excelInput" accept=".xlsx,.xls,.csv" style="display:none">
+  </label>
+  <div id="excelPreview"></div>
+</div>
+
+<script>
+/* ---------------- DATA MODEL ---------------- */
+// category colors
+const CAT = {
+  wt:'var(--wt)', cool:'var(--cool)', ctbd:'var(--ctbd)', wwt:'var(--wwt)',
+  sludge:'var(--sludge)', chem:'var(--chem)'
+};
+const CAT_LABEL = {wt:'수처리(Water Treatment)',cool:'냉각계통',ctbd:'CTBD 재이용계통',wwt:'폐수처리계통',sludge:'슬러지계통',chem:'약품 주입계통'};
+
+// nodes: id, label, x, y, w, h, cat, tag(설비번호), pfd(참조 페이지)
+const N = {};
+function addNode(id,label,x,y,w,h,cat,tag,pfd){ N[id]={id,label,x,y,w,h,cat,tag,pfd}; }
+
+// ---- Water Treatment row ----
+addNode('rawwater','원수저장조',30,50,120,50,'wt','—','W.B. #1');
+addNode('prefilter','Pre-Filter',170,50,100,50,'wt','—','W.B. #3');
+addNode('uf','UF Unit',290,50,100,50,'wt','—','W.B. #4');
+addNode('fwpond','여과수조',410,50,110,50,'wt','—','W.B. #5');
+addNode('ro1','1st RO',540,50,90,50,'wt','—','W.B. #7,8');
+addNode('ro2','2nd RO',650,50,90,50,'wt','—','W.B. #8,10');
+addNode('rotp','RO처리수조',760,50,110,50,'wt','—','W.B. #10');
+addNode('edi','EDI Unit',890,50,90,50,'wt','—','W.B. #11');
+addNode('demi','Demi 저장조',1000,50,110,50,'wt','—','W.B. #12');
+
+// ---- Cooling ----
+addNode('hrsg','HRSG',170,160,100,50,'cool','—','W.B. left');
+addNode('ct','냉각탑 (Cooling Tower)',400,160,170,50,'cool','—','W.B. #15,16');
+
+// ---- CTBD Reclamation ----
+addNode('ctbdpond','CTBD 저류조',170,280,120,50,'ctbd','10GBK41BB001','p1 · W.B. #18');
+addNode('ctbdpre','CTBD Pre-Filter',310,280,110,50,'ctbd','—','p1 · W.B. #19');
+addNode('ctbduf','CTBD UF Unit',440,280,110,50,'ctbd','10GBB41AT104/105/106','p1 · W.B. #19');
+addNode('ctbdfw','CTBD 여과수조',570,280,110,50,'ctbd','10GBK41BB002','p1 · W.B. #20');
+addNode('ctbdro','CTBD RO',700,280,90,50,'ctbd','10GBF41AT101/102/103','p1 · W.B. #22');
+addNode('aop','AOP Unit (CTBD)',810,280,120,50,'ctbd','10GBR41AT101','p1 · W.B. #24');
+addNode('ctbdbrine','CTBD RO Brine 저류조',950,280,150,50,'ctbd','10GBK42BB001','p1/p3');
+
+// ---- Wastewater main line ----
+addNode('normalpond','정상폐수조',30,400,110,50,'wwt','10GNK42BB001','p2 · W.B. #31');
+addNode('phadj','pH조정조',160,400,90,50,'wwt','10GNK42BB003','p2');
+addNode('coag','응집조',270,400,90,50,'wwt','10GNK42BB004','p2 · W.B. #35');
+addNode('floc','응집침전조',380,400,100,50,'wwt','10GNK42BB005','p2');
+addNode('clarifier','경사판 침전조',500,400,110,50,'wwt','10GNK42AT101','p2 · W.B. #36');
+addNode('equal','균등화조',630,400,90,50,'wwt','10GNS42BB001','p2 · W.B. #37');
+addNode('mbr','MBR 생물처리',740,400,110,50,'wwt','10GRK42AT101','p2 · W.B. #39');
+addNode('denitri','탈질탑 (De-N)',870,400,110,50,'wwt','10GBK42AT101/102','p2/p3 · W.B. #34');
+addNode('tpremoval','T-P 제거설비',1000,400,110,50,'wwt','10GRK42AT111~114','p3 · W.B. #40');
+
+addNode('acop','고도산화(AOP)',870,500,110,50,'wwt','10GDC42AT101/102','p3 · W.B. #40');
+addNode('ozonepond','오존처리수조',1000,500,110,50,'wwt','10GNK42BB012','p3');
+addNode('acf','활성탄여과(ACF)',1130,500,110,50,'wwt','10GNK42AT141/142','p3 · W.B. #44');
+addNode('finalph','최종pH조정조',1130,400,110,50,'wwt','10GNK42BB021','p3');
+addNode('effluent','방류수조(Effluent)',1130,600,110,50,'wwt','10GNK42BB025/026','p3 · W.B. #48');
+
+// ---- Sludge line ----
+addNode('sludgeholding','슬러지저류조',270,540,110,50,'sludge','10GNS42BB001','p2 · W.B. #43');
+addNode('thickener','농축조',400,540,90,50,'sludge','10GNS42BB002','p2 · W.B. #45');
+addNode('dehydrator','탈수기',510,540,90,50,'sludge','10GNS42AT101','p2 · W.B. #46/47');
+
+// ---- Chemical tanks (bottom row) ----
+addNode('hcl','HCl',30,760,90,50,'chem','10GCN40BB003','p4');
+addNode('naoh','NaOH',140,760,90,50,'chem','10GCN40BB004/005','p4');
+addNode('sbs','SBS',250,760,90,50,'chem','10GCN40BB006','p4');
+addNode('inhibitor','Inhibitor',360,760,100,50,'chem','10GCN40BB007','p4');
+addNode('naocl','NaOCl',480,760,90,50,'chem','10GCN40BB008','p4');
+addNode('pac','PAC',590,760,90,50,'chem','10GNN42BB003','p4');
+addNode('carbon','탄소원(Glucose)',700,760,120,50,'chem','10GNN42BB004','p4');
+addNode('h3po4','H3PO4',840,760,90,50,'chem','10GNN42BB005','p4');
+addNode('apoly','A-Polymer',950,760,100,50,'chem','10GNN42AT101','p4');
+addNode('cpoly','C-Polymer',1070,760,100,50,'chem','10GNN42AT102','p4');
+addNode('h2o2','H2O2',1190,760,90,50,'chem','10GBH41BB021','p1');
+
+// ---- Chemical injection edges: {chem, to, note} ----
+const EDGES = [
+  {chem:'hcl', to:'ro1', note:'1st RO A/B 주입 (pH 조정)'},
+  {chem:'hcl', to:'ctbdro', note:'CTBD RO A/B/C 주입'},
+  {chem:'hcl', to:'phadj', note:'pH 조정조 주입'},
+  {chem:'hcl', to:'finalph', note:'최종 pH조정조 주입'},
+
+  {chem:'naoh', to:'ro2', note:'2nd RO A/B 주입 (pH 조정)'},
+  {chem:'naoh', to:'mbr', note:'MBR A/B 주입'},
+  {chem:'naoh', to:'phadj', note:'pH 조정조 주입'},
+  {chem:'naoh', to:'finalph', note:'최종 pH조정조 주입'},
+  {chem:'naoh', to:'ctbdro', note:'CTBD RO Micro Filter 주입'},
+
+  {chem:'sbs', to:'ro1', note:'DWT(1st RO계열) 잔류염소 제거'},
+  {chem:'sbs', to:'ctbdro', note:'CTBD RO A/B/C 주입'},
+
+  {chem:'inhibitor', to:'ro1', note:'DWT(1st RO계열) 스케일 방지'},
+  {chem:'inhibitor', to:'ctbdro', note:'CTBD RO A/B/C 주입'},
+
+  {chem:'naocl', to:'uf', note:'UF TMC A/B 세정 주입'},
+  {chem:'naocl', to:'ctbduf', note:'CTBD UF TMC A/B 세정 주입'},
+
+  {chem:'pac', to:'coag', note:'응집조(Coagulation) 주입'},
+  {chem:'pac', to:'tpremoval', note:'T-P 제거설비 주입'},
+
+  {chem:'carbon', to:'denitri', note:'탈질탑 탄소원 주입 (탈질 반응)'},
+  {chem:'carbon', to:'mbr', note:'MBR Anoxic 탄소원 주입'},
+
+  {chem:'h3po4', to:'denitri', note:'탈질탑 영양원 주입'},
+  {chem:'h3po4', to:'mbr', note:'MBR A/B 영양원 주입'},
+
+  {chem:'apoly', to:'floc', note:'응집침전조(Flocculation) 주입'},
+
+  {chem:'cpoly', to:'dehydrator', note:'탈수기 응집보조제 주입'},
+
+  {chem:'h2o2', to:'aop', note:'AOP Unit 산화제 주입 (CTBD)'},
+];
+
+// process-flow backbone edges (non-chemical, thin context lines)
+const FLOW = [
+  ['rawwater','prefilter'],['prefilter','uf'],['uf','fwpond'],['fwpond','ro1'],
+  ['ro1','ro2'],['ro2','rotp'],['rotp','edi'],['edi','demi'],
+  ['fwpond','ct'],['hrsg','ct'],
+  ['ct','ctbdpond'],['ctbdpond','ctbdpre'],['ctbdpre','ctbduf'],['ctbduf','ctbdfw'],
+  ['ctbdfw','ctbdro'],['ctbdro','aop'],['ctbdro','ctbdbrine'],
+  ['normalpond','phadj'],['phadj','coag'],['coag','floc'],['floc','clarifier'],
+  ['clarifier','equal'],['equal','mbr'],['mbr','denitri'],['denitri','tpremoval'],
+  ['tpremoval','acop'],['acop','ozonepond'],['ozonepond','acf'],['acf','finalph'],
+  ['finalph','effluent'],
+  ['clarifier','sludgeholding'],['sludgeholding','thickener'],['thickener','dehydrator'],
+];
+
+/* ---------------- RENDER ---------------- */
+const svg = document.getElementById('svg');
+const NS='http://www.w3.org/2000/svg';
+function el(tag,attrs){ const e=document.createElementNS(NS,tag); for(const k in attrs) e.setAttribute(k,attrs[k]); return e; }
+
+function center(n){ return {x:n.x+n.w/2, y:n.y+n.h/2}; }
+function topC(n){ return {x:n.x+n.w/2, y:n.y}; }
+function botC(n){ return {x:n.x+n.w/2, y:n.y+n.h}; }
+
+function bezier(a,b){
+  const midY = (a.y+b.y)/2;
+  return `M ${a.x} ${a.y} C ${a.x} ${midY}, ${b.x} ${midY}, ${b.x} ${b.y}`;
+}
+
+// section backdrops with labels
+const sections = [
+  {label:'수처리 (Water Treatment System)', x:20, y:20, w:1100, h:100},
+  {label:'냉각계통 (Cooling System)', x:20, y:140, w:560, h:90},
+  {label:'CTBD 재이용계통 (CTBD Reclamation)', x:150, y:260, w:960, h:90},
+  {label:'폐수처리계통 (Wastewater Treatment System)', x:20, y:380, w:1230, h:280},
+  {label:'약품 주입계통 (Chemical Dosing)', x:20, y:740, w:1270, h:90},
+];
+sections.forEach(s=>{
+  const g = el('rect',{x:s.x,y:s.y,width:s.w,height:s.h,rx:10,fill:'none',stroke:'#1c2b3a','stroke-dasharray':'3 4'});
+  svg.appendChild(g);
+  const t = el('text',{x:s.x+10,y:s.y+16,class:'cat-label'});
+  t.textContent = s.label;
+  svg.appendChild(t);
+});
+
+// draw backbone flow lines first (always faint, non-interactive)
+FLOW.forEach(([a,b])=>{
+  const A=N[a], B=N[b]; if(!A||!B) return;
+  const p = el('path',{class:'edge flow', d: bezier(botC(A).y<B.y?{x:A.x+A.w/2,y:A.y+A.h}:center(A), center(B))});
+  // simpler: connect right-center to left-center for horizontal-ish flow
+  const startX = A.x+A.w, startY=A.y+A.h/2;
+  const endX = B.x, endY = B.y+B.h/2;
+  p.setAttribute('d', `M ${startX} ${startY} C ${(startX+endX)/2} ${startY}, ${(startX+endX)/2} ${endY}, ${endX} ${endY}`);
+  p.setAttribute('stroke','#22384a');
+  p.setAttribute('opacity','0.5');
+  svg.appendChild(p);
+});
+
+// draw chemical edges (interactive highlight targets), initially faint
+const edgeEls = [];
+EDGES.forEach(edge=>{
+  const A = N[edge.chem], B = N[edge.to];
+  if(!A||!B) return;
+  const start = topC(A);
+  const end = botC(B);
+  const d = bezier(start,end);
+  const p = el('path',{class:'edge', d});
+  svg.appendChild(p);
+  edgeEls.push({el:p, chem:edge.chem, to:edge.to, note:edge.note});
+});
+
+// draw nodes
+const nodeEls = {};
+Object.values(N).forEach(n=>{
+  const g = el('g',{class:'node', 'data-id':n.id, style:`color:${CAT[n.cat]}`});
+  const r = el('rect',{x:n.x,y:n.y,width:n.w,height:n.h,rx:8,fill:'#101c26',stroke:CAT[n.cat]});
+  g.appendChild(r);
+  const label = el('text',{x:n.x+n.w/2,y:n.y+n.h/2-1,'text-anchor':'middle','dominant-baseline':'middle'});
+  // wrap long labels
+  const words = n.label;
+  label.textContent = words;
+  g.appendChild(label);
+  if(n.tag && n.tag!=='—'){
+    const tagT = el('text',{x:n.x+n.w/2,y:n.y+n.h-6,'text-anchor':'middle',class:'tag'});
+    tagT.textContent = n.tag.length>20? n.tag.slice(0,18)+'…' : n.tag;
+    g.appendChild(tagT);
+  }
+  g.addEventListener('click', ()=> onNodeClick(n.id));
+  svg.appendChild(g);
+  nodeEls[n.id]=g;
+});
+
+/* ---------------- CHEMICAL CHIPS ---------------- */
+const chemIds = EDGES.reduce((acc,e)=>{ if(!acc.includes(e.chem)) acc.push(e.chem); return acc; },[]);
+const chemRow = document.getElementById('chemRow');
+chemIds.forEach(id=>{
+  const btn = document.createElement('button');
+  btn.className='chip';
+  btn.textContent = N[id].label;
+  btn.dataset.id = id;
+  btn.addEventListener('click', ()=> selectChemical(id));
+  chemRow.appendChild(btn);
+});
+
+// legend
+const legend = document.getElementById('legend');
+Object.keys(CAT_LABEL).forEach(k=>{
+  const span = document.createElement('span');
+  span.innerHTML = `<span class="dot" style="background:${CAT[k]}"></span>${CAT_LABEL[k]}`;
+  legend.appendChild(span);
+});
+
+/* ---------------- INTERACTION ---------------- */
+let selected = null;
+
+function selectChemical(id){
+  selected = {type:'chem', id};
+  applyHighlight();
+  renderPanelForChemical(id);
+  document.querySelectorAll('.chip').forEach(c=> c.classList.toggle('active', c.dataset.id===id));
+}
+
+function onNodeClick(id){
+  const n = N[id];
+  if(n.cat==='chem'){ selectChemical(id); return; }
+  selected = {type:'proc', id};
+  applyHighlight();
+  renderPanelForProcess(id);
+  document.querySelectorAll('.chip').forEach(c=> c.classList.remove('active'));
+}
+
+function clearSelection(){
+  selected=null;
+  applyHighlight();
+  document.querySelectorAll('.chip').forEach(c=> c.classList.remove('active'));
+  document.getElementById('panelBody').innerHTML =
+    '<div class="placeholder">약품탱크 칩을 선택하거나 다이어그램의 설비를 탭하면 상세 정보(설비 태그, 연결 관계, PFD 근거)가 여기에 표시됩니다.</div>';
+}
+
+function applyHighlight(){
+  // reset
+  Object.values(nodeEls).forEach(g=>{ g.classList.remove('dim','hit'); });
+  edgeEls.forEach(e=>{ e.el.classList.remove('on'); e.el.classList.remove('dim'); });
+
+  if(!selected){ return; }
+
+  let relevantEdges, relevantNodeIds;
+  if(selected.type==='chem'){
+    relevantEdges = edgeEls.filter(e=> e.chem===selected.id);
+    relevantNodeIds = new Set([selected.id, ...relevantEdges.map(e=>e.to)]);
+  } else {
+    relevantEdges = edgeEls.filter(e=> e.to===selected.id);
+    relevantNodeIds = new Set([selected.id, ...relevantEdges.map(e=>e.chem)]);
+  }
+
+  edgeEls.forEach(e=>{
+    if(relevantEdges.includes(e)) e.el.classList.add('on');
+    else e.el.classList.add('dim');
+  });
+  Object.values(nodeEls).forEach(g=>{
+    const id = g.dataset.id;
+    if(relevantNodeIds.has(id)) g.classList.add('hit');
+    else g.classList.add('dim');
+  });
+}
+
+function renderPanelForChemical(id){
+  const n = N[id];
+  const dests = EDGES.filter(e=>e.chem===id);
+  let html = `<h2>${n.label} <span class="mono" style="color:var(--text-dim);font-size:11px;">(${n.tag})</span></h2>`;
+  html += `<div class="sub">PFD 참조: ${n.pfd} · 주입처 ${dests.length}곳</div>`;
+  html += `<div class="dest-list">`;
+  dests.forEach(d=>{
+    const target = N[d.to];
+    html += `<div class="dest-item"><b>${target.label}</b><span>${d.note}</span></div>`;
+  });
+  html += `</div>`;
+  document.getElementById('panelBody').innerHTML = html;
+}
+
+function renderPanelForProcess(id){
+  const n = N[id];
+  const feeders = EDGES.filter(e=>e.to===id);
+  let html = `<h2>${n.label} <span class="mono" style="color:var(--text-dim);font-size:11px;">(${n.tag})</span></h2>`;
+  html += `<div class="sub">${CAT_LABEL[n.cat]} · PFD 참조: ${n.pfd}</div>`;
+  if(feeders.length){
+    html += `<div class="dest-list">`;
+    feeders.forEach(f=>{
+      const chem = N[f.chem];
+      html += `<div class="dest-item"><b>${chem.label} 주입</b><span>${f.note}</span></div>`;
+    });
+    html += `</div>`;
+  } else {
+    html += `<div class="placeholder">이 설비로 직접 주입되는 약품 계통은 다이어그램에 아직 매핑되지 않았습니다.</div>`;
+  }
+  document.getElementById('panelBody').innerHTML = html;
+}
+
+/* ---------------- ZOOM / PAN ---------------- */
+let zoomLevel = 0.62;
+const zoomWrap = document.getElementById('zoomWrap');
+function applyZoom(){ zoomWrap.style.transform = `scale(${zoomLevel})`; }
+function zoom(factor){ zoomLevel = Math.min(1.6, Math.max(0.35, zoomLevel*factor)); applyZoom(); }
+function fitReset(){ zoomLevel = 0.62; applyZoom(); document.getElementById('stage').scrollTo(0,0); }
+applyZoom();
+
+/* ---------------- EXCEL UPLOAD (scaffold) ---------------- */
+document.getElementById('excelInput').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    try{
+      const data = new Uint8Array(evt.target.result);
+      const wb = XLSX.read(data, {type:'array'});
+      const firstSheetName = wb.SheetNames[0];
+      const ws = wb.Sheets[firstSheetName];
+      const json = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      renderExcelPreview(firstSheetName, json);
+    }catch(err){
+      document.getElementById('excelPreview').innerHTML =
+        `<div class="placeholder" style="color:var(--danger)">파일을 읽는 중 오류가 발생했습니다: ${err.message}</div>`;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+function renderExcelPreview(sheetName, rows){
+  const maxRows = Math.min(rows.length, 12);
+  const maxCols = rows[0] ? Math.min(rows[0].length, 14) : 0;
+  let html = `<div class="sub" style="margin-bottom:8px;">시트: <b class="mono">${sheetName}</b> · 총 ${rows.length}행 (미리보기 상위 ${maxRows}행)</div>`;
+  html += '<table><thead><tr>';
+  for(let c=0;c<maxCols;c++) html += `<th>${(rows[0] && rows[0][c]!=='') ? rows[0][c] : 'col'+c}</th>`;
+  html += '</tr></thead><tbody>';
+  for(let r=1;r<maxRows;r++){
+    html += '<tr>';
+    for(let c=0;c<maxCols;c++){
+      html += `<td>${rows[r] && rows[r][c]!==undefined ? rows[r][c] : ''}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  html += `<div class="sub" style="margin-top:8px;">이 구조를 확인 후, 실제 컬럼명(예: 약품명/일일사용량/전도도/방류량 등)을 알려주시면 다이어그램의 유량 라벨과 자동 연동하도록 다음 버전에서 연결하겠습니다.</div>`;
+  document.getElementById('excelPreview').innerHTML = html;
+}
+</script>
+</body>
+</html>
