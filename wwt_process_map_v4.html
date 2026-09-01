@@ -56,7 +56,8 @@
   .node.hit rect{ filter: drop-shadow(0 0 6px currentColor); }
 
   path.edge{ fill:none; stroke:#2a4457; stroke-width:1.2; opacity:.4; }
-  path.edge.flow{ stroke:#22384a; opacity:.55; }
+  path.edge.flow{ stroke:#22384a; opacity:.55; stroke-dasharray:7 5; animation: flowMain 1.3s linear infinite; }
+  @keyframes flowMain{ to{ stroke-dashoffset:-24; } }
   path.edge.sink{ stroke:#3a5568; stroke-dasharray:3 3; opacity:.5; }
   path.edge.on{ stroke:var(--chem); stroke-width:2.6; opacity:1; stroke-dasharray:6 5;
     animation: dash 1s linear infinite; filter: drop-shadow(0 0 4px var(--chem-glow));}
@@ -68,7 +69,8 @@
   @keyframes flowRecycle{ to{ stroke-dashoffset:-30; } }
   path.edge.important-flow{ stroke-width:3; opacity:1; fill:none;
     stroke-dasharray:9 6; animation: flowRecycle 1s linear infinite; }
-  path.edge.ctbdaop-link{ stroke:var(--ctbdaop); stroke-width:2.6; opacity:.95; fill:none; }
+  path.edge.ctbdaop-link{ stroke:var(--ctbdaop); stroke-width:2.6; opacity:.95; fill:none;
+    stroke-dasharray:8 6; animation: flowRecycle 1s linear infinite; }
   path.edge.flow.sec-hit{ opacity:1; stroke-width:3; }
   path.edge.recycle.sec-hit, path.edge.important-flow.sec-hit, path.edge.ctbdaop-link.sec-hit{ stroke-width:4.5; }
   text.recycle-label{ fill:#5b93ad; font-size:9px; font-weight:700; }
@@ -115,6 +117,24 @@
   .legend{ display:flex; flex-wrap:wrap; gap:10px 16px; padding:10px 16px 4px; font-size:10px; color:var(--text-dim);}
   .legend span{ display:inline-flex; align-items:center; gap:5px;}
   .dot{ width:9px; height:9px; border-radius:2px; display:inline-block; }
+
+  .live-modal-overlay{ display:none; position:fixed; inset:0; background:rgba(5,10,15,.7); z-index:100;
+    align-items:center; justify-content:center; padding:20px; }
+  .live-modal-overlay.open{ display:flex; }
+  .live-modal{ background:var(--panel); border:1px solid var(--border); border-radius:14px; width:100%; max-width:360px;
+    padding:18px; box-shadow:0 10px 40px rgba(0,0,0,.5); }
+  .live-modal-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  .live-modal-head h3{ margin:0; font-size:14.5px; color:#eaf3f8; }
+  .live-modal-close{ background:none; border:none; color:var(--text-dim); font-size:16px; cursor:pointer; padding:2px 6px; }
+  .live-modal-body{ display:flex; flex-direction:column; gap:8px; }
+  .live-stat{ display:flex; justify-content:space-between; align-items:baseline; padding:9px 12px;
+    background:#0e1a24; border:1px solid var(--line); border-radius:8px; }
+  .live-stat .k{ font-size:11.5px; color:var(--text-dim); }
+  .live-stat .v{ font-size:14px; font-weight:700; color:#eaf3f8; font-family:monospace; }
+  .live-modal-foot{ margin-top:12px; font-size:10.5px; color:var(--text-dim); line-height:1.5; }
+
+  .live-readout text{ fill:#ffe14d; font-size:9px; font-weight:700; font-family:monospace;
+    paint-order:stroke; stroke:#0b131b; stroke-width:2.5px; stroke-linejoin:round; pointer-events:none; }
 </style>
 </head>
 <body>
@@ -152,6 +172,17 @@
   </div>
 </div>
 
+<div id="liveModalOverlay" class="live-modal-overlay" onclick="if(event.target===this) closeLiveDataModal()">
+  <div class="live-modal">
+    <div class="live-modal-head">
+      <h3 id="liveModalTitle">—</h3>
+      <button class="live-modal-close" onclick="closeLiveDataModal()">✕</button>
+    </div>
+    <div id="liveModalBody" class="live-modal-body"></div>
+    <div class="live-modal-foot">엑셀 업로드 연동 후 이 값들이 자동으로 갱신될 예정입니다.</div>
+  </div>
+</div>
+
 <div id="excelSection">
   <h3>Daily 엑셀 업로드 (약품 투입량 · 폐수 이동량 · Conductivity)</h3>
   <p>실제 사용 중인 Daily 엑셀 파일을 올리면 시트 구조를 아래에 미리보기로 보여드립니다. 실제 컬럼명(날짜/약품명/투입량/전도도/이송량 등)을 확인해주시면 다음 버전에서 다이어그램 수치와 자동 연동하겠습니다.</p>
@@ -171,6 +202,15 @@ const CAT_LABEL = { wt:'수처리 계통 (Water Treatment)', cool:'냉각 계통
   ctbdaop:'CTBD & AOP System (RO 브라인 처리열)' };
 
 const N = {};
+
+// Live monitoring data — placeholders for now. Once the Daily Excel upload is wired up,
+// these values will be parsed from the file and rendered automatically in the popup.
+const LIVE_DATA_NODES = ['ct','ctbdpond','ctbdro'];
+const LIVE_DATA = {
+  ct:      { label:'COOLING TOWER',            conductivity:null, cl:null, blowdown:null, unit_blowdown:'m³/d' },
+  ctbdpond:{ label:'CTBD STORAGE POND',         conductivity:null, cl:null, blowdown:null, unit_blowdown:'m³/d' },
+  ctbdro:  { label:'CTBD REVERSE OSMOSIS',      conductivity:null, cl:null, blowdown:null, unit_blowdown:'m³/d' },
+};
 function addNode(id,label,x,y,w,h,cat,tag,extra){ N[id]={id,label,x,y,w,h,cat,tag,...(extra||{})}; }
 // `extra` (optional 9th arg) can carry: {capacity:'150 m3', ph:'6~8', purpose:'1차 침전 후 저류'}
 // — reserved for pond capacities / tank capacities / pH / duty, to be filled in once supplied.
@@ -563,6 +603,23 @@ Object.values(N).forEach(n=>{
   g.addEventListener('click', ()=> onNodeClick(n.id));
   content.appendChild(g);
   nodeEls[n.id]=g;
+
+  if(LIVE_DATA_NODES.includes(n.id)){
+    const d = LIVE_DATA[n.id];
+    const shortFmt = (v,unit)=> (v===null||v===undefined||v==='') ? '—' : `${v}${unit||''}`;
+    const liveLines = [
+      `Cond ${shortFmt(d.conductivity,'µS/cm')}`,
+      `Cl ${shortFmt(d.cl,'mg/L')}`,
+      `BD ${shortFmt(d.blowdown,' '+(d.unit_blowdown||''))}`,
+    ];
+    const lg = el('g',{class:'live-readout'});
+    liveLines.forEach((line,i)=>{
+      const t = el('text',{x:n.x+n.w/2, y:n.y+n.h+12+i*11, 'text-anchor':'middle'});
+      t.textContent = line;
+      lg.appendChild(t);
+    });
+    content.appendChild(lg);
+  }
 });
 
 /* ---- Chemical chips ---- */
@@ -587,7 +644,11 @@ Object.keys(CAT_LABEL).forEach(k=>{
 /* ================= INTERACTION ================= */
 let selected = null;
 
+function isSameSelection(type, id){
+  return selected && selected.type===type && selected.id===id;
+}
 function selectChemical(id){
+  if(isSameSelection('chem', id)){ clearSelection(); return; }
   selected = {type:'chem', id};
   applyHighlight();
   renderPanelForChemical(id);
@@ -596,12 +657,17 @@ function selectChemical(id){
 function onNodeClick(id){
   const n = N[id];
   if(n.cat==='chem' || n.cat==='cis'){ selectChemical(id); return; }
-  selected = {type:'proc', id};
-  applyHighlight();
-  renderPanelForProcess(id);
-  document.querySelectorAll('.chip').forEach(c=> c.classList.remove('active'));
+  if(isSameSelection('proc', id)){ clearSelection(); }
+  else {
+    selected = {type:'proc', id};
+    applyHighlight();
+    renderPanelForProcess(id);
+    document.querySelectorAll('.chip').forEach(c=> c.classList.remove('active'));
+  }
+  if(LIVE_DATA_NODES.includes(id)) showLiveDataModal(id);
 }
 function selectSection(catId){
+  if(isSameSelection('section', catId)){ clearSelection(); return; }
   selected = {type:'section', id:catId};
   applyHighlight();
   renderPanelForSection(catId);
@@ -611,7 +677,7 @@ function clearSelection(){
   selected=null; applyHighlight();
   document.querySelectorAll('.chip').forEach(c=> c.classList.remove('active'));
   document.getElementById('panelBody').innerHTML =
-    '<div class="placeholder">위의 약품탱크 칩, 다이어그램의 공정 설비, 또는 왼쪽 계통 라벨을 탭하면 상세 정보가 여기에 표시됩니다.</div>';
+    '<div class="placeholder">위의 약품탱크 칩, 다이어그램의 공정 설비, 또는 왼쪽 계통 라벨을 탭하면 상세 정보가 여기에 표시됩니다. 같은 항목을 다시 탭하면 전체 보기로 돌아옵니다.</div>';
 }
 function applyHighlight(){
   Object.values(nodeEls).forEach(g=>{ g.classList.remove('dim','hit'); });
@@ -622,25 +688,20 @@ function applyHighlight(){
 
   if(selected.type==='section'){
     const relevantNodeIds = new Set(Object.values(N).filter(n=>n.cat===selected.id).map(n=>n.id));
-    // pull in any chemical tanks that inject into a node belonging to this section
+    const relevantFlow = flowEdgeEls.filter(e=> (N[e.a] && N[e.a].cat===selected.id) || (N[e.b] && N[e.b].cat===selected.id));
+    relevantFlow.forEach(e=>{ relevantNodeIds.add(e.a); relevantNodeIds.add(e.b); });
+    const relevantRecycle = recycleEdgeEls.filter(e=> (N[e.from] && N[e.from].cat===selected.id) || (N[e.to] && N[e.to].cat===selected.id));
+    relevantRecycle.forEach(e=>{ relevantNodeIds.add(e.from); relevantNodeIds.add(e.to); });
     const relevantChemEdges = edgeEls.filter(e=> N[e.to] && N[e.to].cat===selected.id);
     relevantChemEdges.forEach(e=> relevantNodeIds.add(e.chem));
+
     Object.values(nodeEls).forEach(g=>{
       const id = g.dataset.id;
       if(relevantNodeIds.has(id)) g.classList.add('hit'); else g.classList.add('dim');
     });
-    flowEdgeEls.forEach(e=>{
-      const rel = (N[e.a] && N[e.a].cat===selected.id) || (N[e.b] && N[e.b].cat===selected.id);
-      if(rel) e.el.classList.add('sec-hit'); else e.el.classList.add('dim');
-    });
-    recycleEdgeEls.forEach(e=>{
-      const rel = (N[e.from] && N[e.from].cat===selected.id) || (N[e.to] && N[e.to].cat===selected.id);
-      if(rel) e.el.classList.add('sec-hit'); else e.el.classList.add('dim');
-    });
-    edgeEls.forEach(e=>{
-      const rel = (N[e.chem] && N[e.chem].cat===selected.id) || (N[e.to] && N[e.to].cat===selected.id);
-      if(rel) e.el.classList.add('on'); else e.el.classList.add('dim');
-    });
+    flowEdgeEls.forEach(e=>{ if(relevantFlow.includes(e)) e.el.classList.add('sec-hit'); else e.el.classList.add('dim'); });
+    recycleEdgeEls.forEach(e=>{ if(relevantRecycle.includes(e)) e.el.classList.add('sec-hit'); else e.el.classList.add('dim'); });
+    edgeEls.forEach(e=>{ if(relevantChemEdges.includes(e)) e.el.classList.add('on'); else e.el.classList.add('dim'); });
     return;
   }
 
@@ -716,6 +777,21 @@ function renderPanelForProcess(id){
     html += `<div class="placeholder">이 설비로 직접 주입되는 약품 계통은 아직 매핑되어 있지 않습니다.</div>`;
   }
   document.getElementById('panelBody').innerHTML = html;
+}
+
+function fmt(v, unit){ return (v===null || v===undefined || v==='') ? '데이터 준비중' : `${v} ${unit||''}`.trim(); }
+function showLiveDataModal(id){
+  const d = LIVE_DATA[id]; if(!d) return;
+  document.getElementById('liveModalTitle').textContent = `${N[id].label} — 실시간 현황`;
+  document.getElementById('liveModalBody').innerHTML = `
+    <div class="live-stat"><span class="k">Conductivity</span><span class="v">${fmt(d.conductivity,'µS/cm')}</span></div>
+    <div class="live-stat"><span class="k">Cl 농도</span><span class="v">${fmt(d.cl,'mg/L')}</span></div>
+    <div class="live-stat"><span class="k">Blowdown 양</span><span class="v">${fmt(d.blowdown,d.unit_blowdown)}</span></div>
+  `;
+  document.getElementById('liveModalOverlay').classList.add('open');
+}
+function closeLiveDataModal(){
+  document.getElementById('liveModalOverlay').classList.remove('open');
 }
 
 /* ================= ZOOM / PAN ================= */
