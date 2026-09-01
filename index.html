@@ -206,10 +206,23 @@ const N = {};
 // Live monitoring data — placeholders for now. Once the Daily Excel upload is wired up,
 // these values will be parsed from the file and rendered automatically in the popup.
 const LIVE_DATA_NODES = ['ct','ctbdpond','ctbdro'];
+// Each node lists its own metrics. `key` is the field name the Daily Excel upload will map onto;
+// `name` is the label shown both under the node and in the popup; `value` stays null until wired up.
 const LIVE_DATA = {
-  ct:      { label:'COOLING TOWER',            conductivity:null, cl:null, blowdown:null, unit_blowdown:'m³/d' },
-  ctbdpond:{ label:'CTBD STORAGE POND',         conductivity:null, cl:null, blowdown:null, unit_blowdown:'m³/d' },
-  ctbdro:  { label:'CTBD REVERSE OSMOSIS',      conductivity:null, cl:null, blowdown:null, unit_blowdown:'m³/d' },
+  ct: { label:'COOLING TOWER', metrics:[
+    { key:'conductivity', name:'Conductivity', value:null, unit:'µS/cm' },
+    { key:'cl',           name:'Cl 농도',      value:null, unit:'mg/L' },
+    { key:'blowdown',     name:'Blowdown 양',  value:null, unit:'m³/d' },
+  ]},
+  ctbdpond: { label:'CTBD STORAGE POND', metrics:[
+    { key:'conductivity',  name:'Conductivity',   value:null, unit:'µS/cm' },
+    { key:'cl',            name:'Cl 농도',         value:null, unit:'mg/L' },
+    { key:'wt_wastewater', name:'WT 생산 폐수양',  value:null, unit:'m³/d' },
+  ]},
+  ctbdro: { label:'CTBD REVERSE OSMOSIS', metrics:[
+    { key:'ctbd_ro_product', name:'CTBD RO 생산수', value:null, unit:'m³/d' },
+    { key:'ctbd_ro_reject',  name:'CTBD RO 폐수',   value:null, unit:'m³/d' },
+  ]},
 };
 function addNode(id,label,x,y,w,h,cat,tag,extra){ N[id]={id,label,x,y,w,h,cat,tag,...(extra||{})}; }
 // `extra` (optional 9th arg) can carry: {capacity:'150 m3', ph:'6~8', purpose:'1차 침전 후 저류'}
@@ -606,16 +619,11 @@ Object.values(N).forEach(n=>{
 
   if(LIVE_DATA_NODES.includes(n.id)){
     const d = LIVE_DATA[n.id];
-    const shortFmt = (v,unit)=> (v===null||v===undefined||v==='') ? '—' : `${v}${unit||''}`;
-    const liveLines = [
-      `Cond ${shortFmt(d.conductivity,'µS/cm')}`,
-      `Cl ${shortFmt(d.cl,'mg/L')}`,
-      `BD ${shortFmt(d.blowdown,' '+(d.unit_blowdown||''))}`,
-    ];
+    const shortFmt = (v,unit)=> (v===null||v===undefined||v==='') ? '—' : `${v}${unit?' '+unit:''}`;
     const lg = el('g',{class:'live-readout'});
-    liveLines.forEach((line,i)=>{
+    d.metrics.forEach((m,i)=>{
       const t = el('text',{x:n.x+n.w/2, y:n.y+n.h+12+i*11, 'text-anchor':'middle'});
-      t.textContent = line;
+      t.textContent = `${m.name} ${shortFmt(m.value, m.unit)}`;
       lg.appendChild(t);
     });
     content.appendChild(lg);
@@ -783,11 +791,9 @@ function fmt(v, unit){ return (v===null || v===undefined || v==='') ? '데이터
 function showLiveDataModal(id){
   const d = LIVE_DATA[id]; if(!d) return;
   document.getElementById('liveModalTitle').textContent = `${N[id].label} — 실시간 현황`;
-  document.getElementById('liveModalBody').innerHTML = `
-    <div class="live-stat"><span class="k">Conductivity</span><span class="v">${fmt(d.conductivity,'µS/cm')}</span></div>
-    <div class="live-stat"><span class="k">Cl 농도</span><span class="v">${fmt(d.cl,'mg/L')}</span></div>
-    <div class="live-stat"><span class="k">Blowdown 양</span><span class="v">${fmt(d.blowdown,d.unit_blowdown)}</span></div>
-  `;
+  document.getElementById('liveModalBody').innerHTML = d.metrics.map(m=>
+    `<div class="live-stat"><span class="k">${m.name}</span><span class="v">${fmt(m.value, m.unit)}</span></div>`
+  ).join('');
   document.getElementById('liveModalOverlay').classList.add('open');
 }
 function closeLiveDataModal(){
