@@ -126,7 +126,7 @@
   .live-modal-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
   .live-modal-head h3{ margin:0; font-size:14.5px; color:#eaf3f8; }
   .live-modal-close{ background:none; border:none; color:var(--text-dim); font-size:16px; cursor:pointer; padding:2px 6px; }
-  .live-modal-body{ display:flex; flex-direction:column; gap:8px; }
+  .live-modal-body{ display:flex; flex-direction:column; gap:8px; word-break:keep-all; }
   .live-stat{ display:flex; justify-content:space-between; align-items:baseline; padding:9px 12px;
     background:#0e1a24; border:1px solid var(--line); border-radius:8px; }
   .live-stat .k{ font-size:11.5px; color:var(--text-dim); }
@@ -817,18 +817,27 @@ function renderPanelForProcess(id){
 
 function fmt(v, unit){ return (v===null || v===undefined || v==='') ? '데이터 준비중' : `${v} ${unit||''}`.trim(); }
 
-// --- Cooling Tower simple advisory model -----------------------------------------
-// PLACEHOLDER ENGINEERING MODEL — target conductivity is fixed by policy (1000 µS/cm),
-// and blowdown is sized to bring/keep conductivity at that level. Once real makeup-water
-// conductivity and circulation flow are supplied (via the Daily Excel upload), this
-// should be replaced/calibrated with real data.
+// --- Cooling Tower blowdown advisory model --------------------------------------
+// Steady-state salt balance for a cooling tower (drift ignored):
+//   Make-up M = Evaporation E + Blowdown B
+//   M · c_makeup = B · c_circulating      → CoC = M/B = c_circ / c_makeup
+//   To hold c_circ at the target:  B = E · c_makeup / (c_target − c_makeup)
+// Constants below are CALIBRATED from two real operating days (8/31, 9/1) supplied
+// by the site — see CT_REFERENCE_DATA. The temperature coefficient is still a rough
+// assumption (only two days, no matching air-temp), so treat forecasts as indicative.
+const CT_REFERENCE_DATA = [
+  // ton/day; cond in µS/cm. CoC & implied makeup conductivity are derived, not measured.
+  { date:'9/1',  blowdown:2474, makeup:8570, demi:1464, cond:861 },
+  { date:'8/31', blowdown:2473, makeup:8894, demi:0,    cond:865 },
+];
+// Derived from the reference days: CoC ≈ M/B (3.46, 3.60), makeup cond ≈ c_circ/CoC
+// (249, 240), evaporation ≈ M − B (6096, 6421). Averages rounded:
 const CT_MODEL_ASSUMPTIONS = {
-  makeupCond: 350,   // µS/cm — assumed raw/makeup water conductivity
-  targetCond: 1000,  // µS/cm — conductivity level to be maintained (site policy)
-  baseEvapPct: 1.2,  // % of circulating flow assumed to evaporate at 25°C
-  tempCoeff: 0.05,   // % evaporation change per °C above/below 25°C
-  closingRate: 0.3,  // assumed fraction of the gap to target closed per day if blowdown is applied
-  circFlow: 2000,    // m³/hr — assumed circulating water flow rate (until real value is supplied)
+  makeupCond: 245,      // µS/cm — implied make-up water conductivity (8/31–9/1 avg)
+  targetCond: 1000,     // µS/cm — conductivity to be maintained (site policy)
+  baseEvapTons: 6260,   // ton/day — evaporation at 25°C baseline (8/31–9/1 avg of M−B)
+  evapTempCoeff: 130,   // ton/day per °C from 25°C — ASSUMPTION, not yet calibrated
+  refTemp: 25,          // °C
 };
 function analyzeCoolingTower(){
   const tempEl = document.getElementById('ctTempInput');
@@ -841,18 +850,26 @@ function analyzeCoolingTower(){
     return;
   }
   const A = CT_MODEL_ASSUMPTIONS;
-  const coc = cond / A.makeupCond;
-  const targetCoC = Math.max(A.targetCond / A.makeupCond, 1.1); // CoC implied by the 1000 µS/cm target
-  const evapPct = Math.max(0.3, A.baseEvapPct + A.tempCoeff*(temp-25));
-  const bdPct = evapPct / Math.max(targetCoC - 1, 0.5);
-  const bdTonsPerDay = (bdPct/100) * A.circFlow * 24; // m³/hr → tons/day (≈1 ton/m³)
-  const predictedCond = cond + (A.targetCond - cond) * A.closingRate;
+  const evap = Math.max(1000, A.baseEvapTons + A.evapTempCoeff*(temp - A.refTemp));
+  const cocNow = cond / A.makeupCond;
+  const cocTarget = A.targetCond / A.makeupCond;
+  const bdHold = evap * A.makeupCond / (A.targetCond - A.makeupCond); // steady-state B to sit at target
+  const over = cond > A.targetCond;
+  const bdToday = over ? bdHold * (cocNow / cocTarget) : bdHold;      // over target → blow down harder for ~1 day
+  const makeupEst = evap + bdToday;
+  const nf = (v)=> Math.round(v).toLocaleString();
 
   out.innerHTML = `
-    <div class="live-stat"><span class="k">현재 CoC (농축배수)</span><span class="v">${coc.toFixed(2)}x</span></div>
-    <div class="live-stat"><span class="k">금일 필요 Blowdown 양</span><span class="v">${bdTonsPerDay.toFixed(1)} 톤/일 (순환수 대비 ${bdPct.toFixed(2)}%)</span></div>
-    <div class="live-stat"><span class="k">내일 예상 Conductivity</span><span class="v">${predictedCond.toFixed(0)} µS/cm</span></div>
-    <div class="sub" style="margin-top:8px;">가정: 유지 목표 Conductivity ${A.targetCond}µS/cm · 보충수 ${A.makeupCond}µS/cm · 순환수량 ${A.circFlow}m³/hr(가정) · 실측 데이터 연동 전 추정치입니다.</div>
+    <div class="live-stat"><span class="k">현재 CoC (농축배수)</span><span class="v">${cocNow.toFixed(2)}x / 목표 ${cocTarget.toFixed(2)}x</span></div>
+    <div class="live-stat"><span class="k">금일 권장 Blowdown</span><span class="v">${nf(bdToday)} 톤/일</span></div>
+    <div class="live-stat"><span class="k">예상 증발량 (기온 ${temp}℃)</span><span class="v">${nf(evap)} 톤/일</span></div>
+    <div class="live-stat"><span class="k">예상 Make-up 소요</span><span class="v">${nf(makeupEst)} 톤/일</span></div>
+    <div class="live-stat"><span class="k">전도도 판정</span><span class="v">${over ? '목표 초과 → Blowdown 증대' : '목표 이내 → 유지/감소 가능'}</span></div>
+    <div class="sub" style="margin-top:8px;">
+      참고 실적 — 9/1: BD 2,474 · Make-up 8,570 · 전도도 861 (CoC 3.46)<br>
+      8/31: BD 2,473 · Make-up 8,894 · 전도도 865 (CoC 3.60)<br>
+      모델 가정: 보충수 전도도 ${A.makeupCond}µS/cm · 기준 증발량 ${A.baseEvapTons.toLocaleString()}톤/일(25℃) · 실측 2일 평균 기반, 기온계수는 미검증 추정.
+    </div>
   `;
 }
 function showLiveDataModal(id){
