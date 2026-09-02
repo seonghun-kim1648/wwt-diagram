@@ -865,11 +865,7 @@ function analyzeCoolingTower(){
     <div class="live-stat"><span class="k">예상 증발량 (기온 ${temp}℃)</span><span class="v">${nf(evap)} 톤/일</span></div>
     <div class="live-stat"><span class="k">예상 Make-up 소요</span><span class="v">${nf(makeupEst)} 톤/일</span></div>
     <div class="live-stat"><span class="k">전도도 판정</span><span class="v">${over ? '목표 초과 → Blowdown 증대' : '목표 이내 → 유지/감소 가능'}</span></div>
-    <div class="sub" style="margin-top:8px;">
-      참고 실적 — 9/1: BD 2,474 · Make-up 8,570 · 전도도 861 (CoC 3.46)<br>
-      8/31: BD 2,473 · Make-up 8,894 · 전도도 865 (CoC 3.60)<br>
-      모델 가정: 보충수 전도도 ${A.makeupCond}µS/cm · 기준 증발량 ${A.baseEvapTons.toLocaleString()}톤/일(25℃) · 실측 2일 평균 기반, 기온계수는 미검증 추정.
-    </div>
+    <div class="sub" style="margin-top:8px;">모델 가정: 보충수 전도도 ${A.makeupCond}µS/cm · 기준 증발량 ${A.baseEvapTons.toLocaleString()}톤/일(25℃) · 실측 2일 평균 기반, 기온계수는 미검증 추정.</div>
   `;
 }
 function showLiveDataModal(id){
